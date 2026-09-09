@@ -1,18 +1,29 @@
 // App.js
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { View, TouchableOpacity, Text } from 'react-native';
 
 import HomeScreen from './src/screens/HomeScreen';
 import DetailScreen from './src/screens/DetailScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
-import { View, TouchableOpacity, Text } from 'react-native';
+import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 
 const Stack = createNativeStackNavigator();
 
-export default function App() {
+// Separate inner component because it needs to call useTheme(), which only
+// works INSIDE the ThemeProvider, not in the same component that renders it.
+function AppNavigator() {
+  const { isDark, colors } = useTheme();
+
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Home">
+    <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
+      <Stack.Navigator
+        initialRouteName="Home"
+        screenOptions={{
+          headerStyle: { backgroundColor: colors.card },
+          headerTintColor: colors.text,
+        }}
+      >
         <Stack.Screen
           name="Home"
           component={HomeScreen}
@@ -37,5 +48,13 @@ export default function App() {
         />
       </Stack.Navigator>
     </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppNavigator />
+    </ThemeProvider>
   );
 }

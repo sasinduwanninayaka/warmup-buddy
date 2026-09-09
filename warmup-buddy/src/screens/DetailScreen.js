@@ -1,5 +1,5 @@
 // src/screens/DetailScreen.js
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,14 +11,21 @@ import {
   TextInput,
 } from 'react-native';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../api/config';
+import { SPORTS } from '../data/warmups';
+import { useTheme } from '../theme/ThemeContext';
+
+const FAVORITES_KEY = 'favorite_exercise_ids';
+const INTENSITY_LEVELS = ['Low', 'Medium', 'High'];
+const SPORT_ICONS = { Football: '⚽', Badminton: '🏸', Basketball: '🏀', Running: '🏃' };
+const INTENSITY_COLORS = { Low: '#16a34a', Medium: '#d97706', High: '#dc2626' };
 
 export default function DetailScreen({ route, navigation }) {
+  const { colors } = useTheme();
   const { exercise: initialExercise } = route.params;
 
-  // useState #1: holds the current exercise data. Starts from what was passed
-  // in via navigation, but gets replaced after a successful Edit so the
-  // screen shows the latest saved values without needing to go back and forth.
+  // useState #1: holds the current exercise data, replaced after a successful Edit
   const [exercise, setExercise] = useState(initialExercise);
 
   // useState #2: tracks whether this exercise is marked done.
@@ -31,7 +38,7 @@ export default function DetailScreen({ route, navigation }) {
   // useState #5: controls the Edit modal visibility
   const [editVisible, setEditVisible] = useState(false);
 
-  // useState #6-9: the editable form fields, pre-filled from the current exercise
+  // useState #6-9: the editable form fields, pre-filled from the current exercise.
   const [editExercise, setEditExercise] = useState(exercise.exercise);
   const [editSport, setEditSport] = useState(exercise.sport);
   const [editDuration, setEditDuration] = useState(exercise.duration);
@@ -40,7 +47,35 @@ export default function DetailScreen({ route, navigation }) {
   // useState #10: true while the Edit PUT request is in flight
   const [savingEdit, setSavingEdit] = useState(false);
 
-  // Toggles "completed" and PUTs the new value back to MockAPI.
+  // useState #11: whether this exercise is in the user's favorites
+  const [isFavorite, setIsFavorite] = useState(false);
+
+  // Loads the favorite status for this exercise from AsyncStorage on mount
+  useEffect(() => {
+    AsyncStorage.getItem(FAVORITES_KEY)
+      .then(saved => {
+        const ids = saved ? JSON.parse(saved) : [];
+        setIsFavorite(ids.includes(exercise.id));
+      })
+      .catch(() => {});
+  }, []);
+
+  // Toggles this exercise's favorite status and saves it back to AsyncStorage
+  const toggleFavorite = async () => {
+    try {
+      const saved = await AsyncStorage.getItem(FAVORITES_KEY);
+      const ids = saved ? JSON.parse(saved) : [];
+      const updated = ids.includes(exercise.id)
+        ? ids.filter(id => id !== exercise.id)
+        : [...ids, exercise.id];
+
+      await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(updated));
+      setIsFavorite(!isFavorite);
+    } catch (err) {
+      // Silently ignore — favoriting is a non-critical nice-to-have
+    }
+  };
+
   const handleToggleComplete = () => {
     const newValue = !completed;
     setUpdating(true);
@@ -52,13 +87,11 @@ export default function DetailScreen({ route, navigation }) {
         setExercise(prev => ({ ...prev, iCompleted: newValue }));
       })
       .catch(err => {
-        console.log('Update error:', err.message);
         Alert.alert('Error', 'Could not update this exercise. Check your connection.');
       })
       .finally(() => setUpdating(false));
   };
 
-  // Opens the edit form, pre-filled with current values
   const openEditModal = () => {
     setEditExercise(exercise.exercise);
     setEditSport(exercise.sport);
@@ -67,9 +100,8 @@ export default function DetailScreen({ route, navigation }) {
     setEditVisible(true);
   };
 
-  // Sends the edited fields to MockAPI via PUT, updates this screen's state
   const handleSaveEdit = () => {
-    if (!editExercise.trim() || !editSport.trim()) {
+    if (!editExercise.trim() || !editDuration.trim()) {
       return;
     }
 
@@ -88,15 +120,14 @@ export default function DetailScreen({ route, navigation }) {
       .then(() => {
         setExercise(updated);
         setEditVisible(false);
+        Alert.alert('Saved', 'Exercise updated successfully.');
       })
       .catch(err => {
-        console.log('Edit error:', err.message);
         Alert.alert('Error', 'Could not save changes. Check your connection.');
       })
       .finally(() => setSavingEdit(false));
   };
 
-  // Confirms, then DELETEs this exercise from MockAPI and navigates back.
   const handleDelete = () => {
     Alert.alert(
       'Delete exercise?',
@@ -112,7 +143,6 @@ export default function DetailScreen({ route, navigation }) {
               .delete(`${API_URL}/${exercise.id}`)
               .then(() => navigation.goBack())
               .catch(err => {
-                console.log('Delete error:', err.message);
                 Alert.alert('Error', 'Could not delete this exercise. Check your connection.');
                 setDeleting(false);
               });
@@ -122,29 +152,36 @@ export default function DetailScreen({ route, navigation }) {
     );
   };
 
+  const intensityColor = INTENSITY_COLORS[exercise.intensity] || '#2563eb';
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.titleRow}>
-        <Text style={styles.title}>{exercise.exercise}</Text>
+        <Text style={[styles.title, { color: colors.text }]}>
+          {SPORT_ICONS[exercise.sport] || '💪'} {exercise.exercise}
+        </Text>
+        <TouchableOpacity onPress={toggleFavorite} style={styles.starButton}>
+          <Text style={styles.starIcon}>{isFavorite ? '★' : '☆'}</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.editIconButton} onPress={openEditModal}>
           <Text style={styles.editIconText}>Edit</Text>
         </TouchableOpacity>
       </View>
-      <Text style={styles.sport}>{exercise.sport} warm-up</Text>
+      <Text style={[styles.sport, { color: colors.subtext }]}>{exercise.sport} warm-up</Text>
 
       <View style={styles.metaRow}>
-        <View style={styles.metaBox}>
-          <Text style={styles.metaLabel}>Duration</Text>
-          <Text style={styles.metaValue}>{exercise.duration}</Text>
+        <View style={[styles.metaBox, { backgroundColor: colors.card }]}>
+          <Text style={[styles.metaLabel, { color: colors.subtext }]}>Duration</Text>
+          <Text style={[styles.metaValue, { color: colors.text }]}>{exercise.duration}</Text>
         </View>
-        <View style={styles.metaBox}>
-          <Text style={styles.metaLabel}>Intensity</Text>
-          <Text style={styles.metaValue}>{exercise.intensity}</Text>
+        <View style={[styles.metaBox, { backgroundColor: intensityColor + '15' }]}>
+          <Text style={[styles.metaLabel, { color: colors.subtext }]}>Intensity</Text>
+          <Text style={[styles.metaValue, { color: intensityColor }]}>{exercise.intensity}</Text>
         </View>
       </View>
 
       {!!exercise.description && (
-        <Text style={styles.description}>{exercise.description}</Text>
+        <Text style={[styles.description, { color: colors.text }]}>{exercise.description}</Text>
       )}
 
       <TouchableOpacity
@@ -172,17 +209,60 @@ export default function DetailScreen({ route, navigation }) {
       {/* Edit modal */}
       <Modal visible={editVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Edit Exercise</Text>
+          <View style={[styles.modalBox, { backgroundColor: colors.card }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Exercise</Text>
 
-            <TextInput style={styles.input} placeholder="Exercise name" value={editExercise} onChangeText={setEditExercise} />
-            <TextInput style={styles.input} placeholder="Sport" value={editSport} onChangeText={setEditSport} />
-            <TextInput style={styles.input} placeholder="Duration" value={editDuration} onChangeText={setEditDuration} />
-            <TextInput style={styles.input} placeholder="Intensity" value={editIntensity} onChangeText={setEditIntensity} />
+            <Text style={[styles.fieldLabel, { color: colors.subtext }]}>Exercise name</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+              value={editExercise}
+              onChangeText={setEditExercise}
+            />
+
+            <Text style={[styles.fieldLabel, { color: colors.subtext }]}>Sport</Text>
+            <View style={styles.pickerRow}>
+              {SPORTS.map(sport => (
+                <TouchableOpacity
+                  key={sport}
+                  style={[styles.pickerChip, { backgroundColor: colors.chipBg }, editSport === sport && styles.pickerChipActive]}
+                  onPress={() => setEditSport(sport)}
+                >
+                  <Text style={[styles.pickerChipText, { color: colors.text }, editSport === sport && styles.pickerChipTextActive]}>
+                    {SPORT_ICONS[sport]} {sport}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={[styles.fieldLabel, { color: colors.subtext }]}>Duration</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+              value={editDuration}
+              onChangeText={setEditDuration}
+            />
+
+            <Text style={[styles.fieldLabel, { color: colors.subtext }]}>Intensity</Text>
+            <View style={styles.pickerRow}>
+              {INTENSITY_LEVELS.map(level => (
+                <TouchableOpacity
+                  key={level}
+                  style={[
+                    styles.pickerChip,
+                    { backgroundColor: colors.chipBg },
+                    editIntensity === level && { backgroundColor: INTENSITY_COLORS[level] },
+                  ]}
+                  onPress={() => setEditIntensity(level)}
+                >
+                  <Text style={[styles.pickerChipText, { color: colors.text }, editIntensity === level && styles.pickerChipTextActive]}>
+                    {level}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
             <View style={styles.modalButtonRow}>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setEditVisible(false)} disabled={savingEdit}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+              <TouchableOpacity style={[styles.cancelButton, { backgroundColor: colors.chipBg }]} onPress={() => setEditVisible(false)} disabled={savingEdit}>
+                <Text style={[styles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.saveButton} onPress={handleSaveEdit} disabled={savingEdit}>
                 {savingEdit ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Save</Text>}
@@ -196,29 +276,37 @@ export default function DetailScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, paddingTop: 40, backgroundColor: '#fff' },
-  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { fontSize: 24, fontWeight: '700', flex: 1 },
-  editIconButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: '#eef2ff' },
-  editIconText: { color: '#2563eb', fontWeight: '600' },
-  sport: { color: '#666', marginBottom: 20 },
+  container: { flex: 1, padding: 20, paddingTop: 40 },
+  titleRow: { flexDirection: 'row', alignItems: 'center' },
+  title: { fontSize: 22, fontWeight: '700', flex: 1 },
+  starButton: { paddingHorizontal: 6 },
+  starIcon: { fontSize: 24, color: '#d97706' },
+  editIconButton: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#eef2ff' },
+  editIconText: { color: '#2563eb', fontWeight: '700' },
+  sport: { marginBottom: 20, marginTop: 4 },
   metaRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  metaBox: { backgroundColor: '#f5f6fa', borderRadius: 10, padding: 12, flex: 1 },
-  metaLabel: { fontSize: 12, color: '#888' },
-  metaValue: { fontSize: 16, fontWeight: '600', marginTop: 2 },
-  description: { fontSize: 15, lineHeight: 22, color: '#333', marginBottom: 30 },
-  button: { backgroundColor: '#2563eb', padding: 14, borderRadius: 10, alignItems: 'center', marginTop: 10 },
+  metaBox: { borderRadius: 12, padding: 14, flex: 1 },
+  metaLabel: { fontSize: 12 },
+  metaValue: { fontSize: 17, fontWeight: '700', marginTop: 2 },
+  description: { fontSize: 15, lineHeight: 22, marginBottom: 30 },
+  button: { backgroundColor: '#2563eb', padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 10 },
   buttonDone: { backgroundColor: '#16a34a' },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 15 },
-  deleteButton: { padding: 14, borderRadius: 10, alignItems: 'center', marginTop: 12, borderWidth: 1, borderColor: '#dc2626' },
-  deleteButtonText: { color: '#dc2626', fontWeight: '600', fontSize: 15 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalBox: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20 },
-  modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 14 },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 10, marginBottom: 10 },
-  modalButtonRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 8 },
-  cancelButton: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#eee' },
-  cancelButtonText: { color: '#333', fontWeight: '600' },
-  saveButton: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8, backgroundColor: '#2563eb', minWidth: 70, alignItems: 'center' },
-  saveButtonText: { color: '#fff', fontWeight: '600' },
+  buttonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  deleteButton: { padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 12, borderWidth: 1.5, borderColor: '#dc2626' },
+  deleteButtonText: { color: '#dc2626', fontWeight: '700', fontSize: 15 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  modalBox: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 22, maxHeight: '85%' },
+  modalTitle: { fontSize: 19, fontWeight: '700', marginBottom: 16 },
+  fieldLabel: { fontSize: 13, fontWeight: '600', marginBottom: 6, marginTop: 6 },
+  input: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 4 },
+  pickerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  pickerChip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
+  pickerChipActive: { backgroundColor: '#2563eb' },
+  pickerChipText: { fontWeight: '600', fontSize: 13 },
+  pickerChipTextActive: { color: '#fff' },
+  modalButtonRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 18 },
+  cancelButton: { paddingVertical: 11, paddingHorizontal: 18, borderRadius: 10 },
+  cancelButtonText: { fontWeight: '600' },
+  saveButton: { paddingVertical: 11, paddingHorizontal: 22, borderRadius: 10, backgroundColor: '#2563eb', minWidth: 80, alignItems: 'center' },
+  saveButtonText: { color: '#fff', fontWeight: '700' },
 });
