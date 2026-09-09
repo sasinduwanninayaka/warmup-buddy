@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "d3bb29bf-a8d7-421a-9f39-ce7ad8c7b657"
+      }
+    },
+    "android": {
+      "package": "com.sasiya.warmupbuddy"
+    }
+  }
+}
