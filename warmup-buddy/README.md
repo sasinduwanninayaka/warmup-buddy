@@ -63,3 +63,31 @@ _(Add screenshots of Home, Detail, and Settings screens here before submission.)
 This project was scaffolded with AI assistance for structure and boilerplate, then
 customized, tested, and understood component-by-component by the author for the
 Sprint 1 submission of CSI2114 Mobile Application Development.
+
+## Sprint 2 Updates
+
+Extended the Sprint 1 prototype with a live REST API and local storage.
+
+**API Integration (MockAPI)**
+- Created a MockAPI resource called `exercises` with fields: exercise, sport, duration, intensity, description, iCompleted
+- Implemented GET, POST, PUT, and DELETE using axios
+- HomeScreen uses `useFocusEffect` (not `useEffect`) so the list refreshes automatically after edits/deletes on DetailScreen
+
+**Local Storage (AsyncStorage)**
+- Exercise list is cached locally; if the API can't be reached, the app falls back to the cached copy and shows an offline banner
+- Settings (name, reminders, dark mode) are saved and persist across app restarts
+- Favorited exercises are also saved locally
+
+**Extra Features**
+- Search bar (filters by exercise name)
+- Favorites (star icon, filterable)
+- Dark mode (built with React Context)
+- Pull-to-refresh
+- Stats summary in Settings
+
+**Run the app:**
+\`\`\`
+npx expo start
+\`\`\`
+
+**Tech added:** axios, @react-native-async-storage/async-storage
